@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/pkg/errors"
+	perr "github.com/pkg/errors"
 )
 
 type IS3Uploader interface {
@@ -33,7 +33,7 @@ func (s *s3Uploader) UploadBufferWithContext(ctx context.Context, buf *aws.Write
 		StorageClass: aws.String(s3.ObjectStorageClassStandard),
 	})
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, perr.WithStack(err)
 	}
 	return out, nil
 }

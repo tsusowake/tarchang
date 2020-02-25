@@ -1,61 +1,56 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/tsusowake/tarchang"
 	"github.com/tsusowake/tarchang/s3"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 )
 
-
 type Batch struct {
-	Downloader s3.IS3Downloader
+	downloader s3.IS3Downloader
 }
 
-func (b *Batch) Decompose(bucket, objectKey string) {
+func (d *Batch) Retrieve(bucket, objectKey string) {
 
-	buf, err := b.Downloader.Download(bucket, objectKey)
-	if err != nil {
-		panic(err)
+	retrieveFiles := []struct {
+		Offset int64
+		Byte   int64
+		Name   string
+	}{
+		{Offset: 512, Byte: 1893411, Name: "cat-1.jpg"},
+		{Offset: 1894912, Byte: 150460, Name: "cat-2.jpg"},
+		{Offset: 2045952, Byte: 332314, Name: "cat-3.jpg"},
+		{Offset: 2379264, Byte: 1705696, Name: "lion-1.jpg"},
 	}
 
-	reader := tar.NewReader(bytes.NewReader(buf.Bytes()))
-	for {
-		header, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
+	for _, ff := range retrieveFiles {
+		buf, err := d.downloader.DownloadWithRange(bucket, objectKey, &s3.Range{
+			Offset: ff.Offset,
+			Byte:   ff.Byte,
+		})
 		if err != nil {
 			panic(err)
 		}
 
-		downloadPath := filepath.Join("./tmp", header.Name)
+		downloadPath := filepath.Join("./tmp", ff.Name)
 		downloadDir := filepath.Dir(downloadPath)
 		if err := os.MkdirAll(downloadDir, 0777); err != nil {
 			panic(err)
 		}
 
-		bout := bytes.NewBuffer([]byte{})
-		if _, err := io.Copy(bout, reader); err != nil {
+		if err := ioutil.WriteFile(downloadPath, buf.Bytes(), 0644); err != nil {
 			panic(err)
 		}
 
-		if err := ioutil.WriteFile(downloadPath, bout.Bytes(), 0644); err != nil {
-			panic(err)
-		}
+		println(fmt.Sprintf("hash: %s", tarchang.BufToSha256String(buf.Bytes())))
 	}
-
-	return
 }
-
-
-
 
 func main() {
 	load()
@@ -66,8 +61,8 @@ func main() {
 		WithMaxRetries(5)
 	sess := session.Must(session.NewSession(awsConfig))
 
-	b := &Batch{Downloader:s3.NewS3Downloader(sess)}
-	b.Decompose(conf.Bucket, conf.ObjectKey)
+	b := &Batch{downloader: s3.NewS3Downloader(sess)}
+	b.Retrieve(conf.Bucket, conf.ObjectKey)
 }
 
 type Config struct {
